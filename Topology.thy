@@ -1,5 +1,5 @@
 theory Topology
-  imports Main "HOL-Library.FuncSet"
+  imports Main HOL.Real "HOL-Library.FuncSet"
 begin
 
 locale topological_space =
@@ -27,6 +27,16 @@ proof
 next
   from assms show "U ⊆ carrier"
     using open_subsets by auto
+qed
+
+lemma binary_union_closed:
+  assumes "X ∈ opens"
+  and "Y ∈ opens"
+  shows "(X ∪ Y) ∈ opens"
+proof -
+  have "{X, Y} ⊆ opens" using assms by auto
+  then have "⋃ {X, Y} ∈ opens" by (fact union_closed)
+  then show ?thesis by auto
 qed
 
 end
@@ -147,11 +157,9 @@ proof (unfold_locales, blast)
     proof
       fix x :: "'a"
       assume 8: "x ∈ ?U1 ∩ S"
-      then obtain R where 9: "x ∈ R ∧ R ∈ ?A1" by auto
-      then have 10: "R ∩ S ⊆ ⋃ A" by auto
-      from 8 have "x ∈ S" by auto
-      then have "x ∈ R ∩ S" using 9 by auto
-      then show "x ∈ ⋃ A" using 10 by auto
+      then obtain R where "x ∈ R ∧ R ∈ ?A1" by auto
+      then have "x ∈ R ∩ S" "R ∩ S ⊆ ⋃ A" using 8 by auto
+      then show "x ∈ ⋃ A" by auto
     qed
   then have "⋃ A = ?U1 ∩ S" using 7 by auto
   then show "⋃ A ∈ {U ∩ S | U. U ∈ OX}" using `?U1 ∈ OX` by auto
@@ -441,6 +449,147 @@ sublocale topological_space carrier opens
   rewrites "top.neigh = neigh"
   by (rule topo, rule alt_of_top)
 
+end
+
+locale basis_for = topological_space +
+  fixes B
+  assumes collection_of_opens [intro]: "B ⊆ opens"
+  and every_open_is_union [intro]: "[| U ∈ opens |] ==> ∃X ⊆ B. U = ⋃ X"
+
+locale basis =
+  fixes carrier :: "'a set"
+  and B :: "'a set set"
+  assumes basis_carrier [intro]: "B ⊆ Pow carrier"
+  and inter_closed [intro]: "[| X ∈ B; Y ∈ B |] ==> X ∩ Y ∈ B"
+  and covers [intro, simp]: "carrier = ⋃ B"
+begin
+
+definition opens :: "'a set set" where
+"opens = {⋃ C | C. C ⊆ B}"
+
+lemma opens_are_subsets: "opens ⊆ Pow carrier"
+  by (smt (verit) PowI Union_mono basis.opens_def basis_axioms basis_def mem_Collect_eq subsetI)
+
+sublocale basis_for carrier opens B
+proof (unfold_locales, fact opens_are_subsets)
+  fix A
+  assume "A ⊆ opens"
+  then have 0: "X ∈ A ==> ∃C. X = ⋃ C ∧ C ⊆ B" for X
+    unfolding opens_def by auto
+  let ?A1 = "{X∈B. ∃C. (X ∈ C) ∧ (⋃ C ∈ A)}"
+  {
+    {
+      fix x
+      assume "x ∈ ⋃ A"
+      then obtain X where 2: "x ∈ X" "X ∈ A" by auto
+      then obtain C where 1: "X = ⋃ C" "C ⊆ B" using 0 by auto
+      then obtain Y where 3: "x ∈ Y" "Y ∈ C" using `x ∈ X` by auto
+      then have "Y ∈ B" using 1 by auto
+      moreover have "∃C. (Y ∈ C) ∧ (⋃ C ∈ A)" using 3(2) 1(1) 2(2) by auto
+      ultimately have "Y ∈ ?A1" by auto
+      then have "x ∈ ⋃ ?A1" using 3(1) by auto
+    }
+    then have "⋃ A ⊆ ⋃ ?A1" by blast
+  }
+  moreover
+  {
+    {
+      fix x
+      assume "x ∈ ⋃ ?A1"
+      then obtain X where 0: "x ∈ X" "X ∈ B" "∃C. (X ∈ C) ∧ (⋃ C ∈ A)" by auto
+      then obtain C where 1: "X ∈ C" "⋃ C ∈ A" by auto
+      then have "x ∈ ⋃ C" using 0(1) by auto
+      then have "x ∈ ⋃ A" using 1(2) by auto
+    }
+    then have "⋃ ?A1 ⊆ ⋃ A" by blast
+  }
+  ultimately have "⋃ A = ⋃ ?A1" by auto
+  thus "⋃ A ∈ opens" unfolding opens_def by auto
+next
+  fix X Y
+  assume "X ∈ opens" "Y ∈ opens"
+  then obtain C D where 0: "X = ⋃ C" "C ⊆ B" "Y = ⋃ D" "D ⊆ B"
+    unfolding opens_def by auto
+  let ?K = "{ P ∩ Q | P Q. P ∈ C ∧ Q ∈ D}"
+  from 0 have "?K ⊆ B" by (auto simp: inter_closed)
+  {
+    fix x
+    have "x ∈ X ∩ Y ⟷ x ∈ X ∧ x ∈ Y" by auto
+    also have "... ⟷ (∃c. x ∈ c ∧ c ∈ C) ∧ (∃d. x ∈ d ∧ d ∈ D)"
+      using "0"(1) "0"(3) by blast
+    also have "... ⟷ (∃c d. x ∈ c ∩ d ∧ c ∈ C ∧ d ∈ D)" by blast
+    also have "... ⟷ (∃PQ ∈ ?K. x ∈ PQ)" by blast
+    also have "... ⟷ x ∈ ⋃ ?K" by blast
+    finally have "x ∈ X ∩ Y ⟷ x ∈ ⋃ ?K" .
+  }
+  then have "X ∩ Y = ⋃ ?K" by blast
+  then show "X ∩ Y ∈ opens" using `?K ⊆ B` unfolding opens_def by auto
+next
+  show "carrier ∈ opens" using opens_def by auto
+next
+  show "B ⊆ opens" unfolding opens_def by auto
+next
+  fix U
+  assume "U ∈ opens"
+  then show "∃X ⊆ B. U = ⋃ X" unfolding opens_def by auto
+qed
+
+end
+
+locale real_line
+begin
+
+definition open_interval :: "real * real => real set" where
+"open_interval = (λ(x,y). {r. x < r ∧ r < y})"
+
+definition open_intervals :: "real set set" where
+"open_intervals = {open_interval (x, y) | x y. True}"
+
+lemma open_interval_iff [intro]:
+  "r ∈ open_interval p ⟷ fst p < r ∧ r < snd p"
+  unfolding open_interval_def by auto
+
+lemma open_intervals_iff [intro]:
+  "I ∈ open_intervals ⟷ (∃p. I = open_interval p)"
+  unfolding open_intervals_def by auto
+
+sublocale basis "UNIV :: real set" "open_intervals"
+proof (unfold_locales, auto)
+  fix X Y
+  assume "X ∈ open_intervals" "Y ∈ open_intervals"
+  then obtain v w x y where
+    "X = open_interval (v, w)"
+    "Y = open_interval (x, y)"
+    by (auto simp: open_intervals_iff)
+  then have "X ∩ Y = {r. v < r ∧ r < w ∧ x < r ∧ r < y}"
+    unfolding open_interval_def by auto
+  moreover have "(v < r ∧ r < w ∧ x < r ∧ r < y) = (max v x < r ∧ r < min w y)"
+    for r by arith
+  ultimately have "X ∩ Y = {r. max v x < r ∧ r < min w y}" by auto
+  then have "X ∩ Y = open_interval (max v x, min w y)"
+    unfolding open_interval_def by auto
+  then have "∃p. X ∩ Y = open_interval p" by blast
+  then show "X ∩ Y ∈ open_intervals" by (auto simp: open_intervals_iff)
+next
+  fix x :: real
+  have "x - 1 < x ∧ x < x + 1" by arith
+  then have "x ∈ open_interval (x - 1, x + 1)"
+    by (auto simp: open_interval_iff)
+  then have
+    "open_interval (x - 1, x + 1) ∈ open_intervals"
+    "x ∈ open_interval (x - 1, x + 1)"
+    by (auto simp: open_intervals_iff)
+  then show "∃I ∈ open_intervals. x ∈ I" by auto
+qed
+
+lemma open_interval_is_open [intro]: "open_interval (x, y) ∈ opens"
+  using collection_of_opens open_intervals_iff by blast
+
+lemma "open_interval (0, 1) ∈ opens"
+  by (fact open_interval_is_open)
+
+lemma "open_interval (0, 1) ∪ open_interval (3, 10) ∈ opens"
+  by (auto simp: binary_union_closed open_interval_is_open)
 end
 
 end
