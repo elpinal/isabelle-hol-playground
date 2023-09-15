@@ -39,6 +39,12 @@ proof -
   then show ?thesis by auto
 qed
 
+definition closed_sets :: "'a set set" where
+"closed_sets = {carrier - U | U. U ∈ opens}"
+
+lemma closed_subsets [intro]: "closed_sets ⊆ Pow carrier"
+  by (auto simp: closed_sets_def)
+
 end
 
 locale indiscrete_space =
@@ -225,18 +231,11 @@ proof -
 qed
 
 definition opens :: "'a set set" where
-"opens = {U : Pow carrier. ∀ x ∈ U. U ∈ neigh x}"
+"opens = {U : Pow carrier. ∀x ∈ U. U ∈ neigh x}"
 
 lemma opens_iff:
-  fixes U :: "'a set"
-  assumes "U ∈ Pow carrier"
-  and "∀x ∈ U. U ∈ neigh x"
-  shows "U ∈ opens"
-  unfolding opens_def
-proof
-  from assms show "U ∈ Pow carrier ∧ (∀x∈U. U ∈ neigh x)"
-    by auto
-qed
+  shows "U ∈ opens ⟷ U ∈ Pow carrier ∧ (∀x ∈ U. U ∈ neigh x)"
+  unfolding opens_def by auto
 
 lemma point_in_alt_open_is_in_carrier [intro, simp]:
   fixes x U
@@ -575,11 +574,8 @@ next
   have "x - 1 < x ∧ x < x + 1" by arith
   then have "x ∈ open_interval (x - 1, x + 1)"
     by (auto simp: open_interval_iff)
-  then have
-    "open_interval (x - 1, x + 1) ∈ open_intervals"
-    "x ∈ open_interval (x - 1, x + 1)"
-    by (auto simp: open_intervals_iff)
-  then show "∃I ∈ open_intervals. x ∈ I" by auto
+  then show "∃I ∈ open_intervals. x ∈ I"
+    by (intro bexI, auto simp: open_intervals_iff)
 qed
 
 lemma open_interval_is_open [intro]: "open_interval (x, y) ∈ opens"
@@ -590,6 +586,130 @@ lemma "open_interval (0, 1) ∈ opens"
 
 lemma "open_interval (0, 1) ∪ open_interval (3, 10) ∈ opens"
   by (auto simp: binary_union_closed open_interval_is_open)
+
+lemma open_interval_is_neigh [intro]:
+  assumes "0 < d"
+  shows "open_interval (c - d, c + d) ∈ neigh c" (is "?N ∈ neigh c")
+proof -
+  have "c ∈ open_interval (c - (d / 2), c + (d / 2))"
+    (is "c ∈ open_interval (?x, ?y)")
+    using assms
+    by (auto simp: open_interval_iff)
+  moreover have "open_interval (?x, ?y) ⊆ ?N"
+    by (auto simp: open_interval_iff)
+  ultimately have "∃U∈opens. c ∈ U ∧ U ⊆ ?N" by auto
+  then have "?N ∈ {N ∈ Pow UNIV. ∃U∈opens. c ∈ U ∧ U ⊆ N}" by blast
+  then show ?thesis unfolding neigh_def by auto
+qed
+
+lemma real_neigh:
+  assumes "0 < d"
+  and "open_interval (c - d, c + d) ⊆ N" (is "?I ⊆ N")
+  shows "N ∈ neigh c"
+proof (intro alt.enlarge[where ?x = "c" and ?N = "?I" and ?U = "N"])
+  show "c ∈ UNIV" by blast
+next
+  show "?I ∈ neigh c" using assms(1) by blast
+next
+  show "N ⊆ UNIV" by blast
+next
+  show "?I ⊆ N" by (fact assms)
+qed
+
+lemma "{r. 0 ≤ r ∧ r < 10} ∈ neigh 5" (is "?X ∈ neigh 5")
+proof -
+  have "(0 :: real) < 5" by arith
+  moreover have "open_interval (0, 10) ⊆ ?X"
+    by (auto simp: open_interval_iff)
+  ultimately show ?thesis
+    by (metis (full_types) cancel_comm_monoid_add_class.diff_cancel numeral_Bit0 real_neigh)
+qed
+
+end
+
+context topological_space begin
+definition limit_point :: "'a set => 'a => bool" where
+"limit_point A p ⟷ (∀N. N ∈ neigh p --> (∃x ∈ N. x ∈ A - {p}))"
+
+lemma limit_point_iff [intro, simp]:
+  "limit_point A p ⟷ (∀N. N ∈ neigh p --> (∃x ∈ N. x ∈ A - {p}))"
+  by (fact limit_point_def)
+end
+
+(* Strongly closed *)
+locale closed = topological_space +
+  fixes A
+  assumes is_closed [intro]: "A ∈ closed_sets"
+
+(* Weekly closed *)
+locale contains_all_its_limit_points = topological_space +
+  fixes A
+  assumes subset [intro]: "A ⊆ carrier"
+  and limit_point_in_A [intro]: "[|p ∈ carrier; limit_point A p|] ==> p ∈ A"
+
+context closed begin
+
+sublocale contains_all_its_limit_points carrier opens A
+proof (unfold_locales)
+  have "closed_sets ∈ Pow (Pow carrier)" by (auto simp: closed_subsets)
+  then show "A ⊆ carrier" using is_closed by auto
+next
+  fix p
+  assume "p ∈ carrier" "limit_point A p"
+  then have 0: "∀N. N ∈ neigh p --> (∃x ∈ N. x ∈ A - {p})" by auto
+  from is_closed obtain U where 1: "A = carrier - U" "U ∈ opens"
+    by (auto simp: closed_sets_def)
+  have "False" if "p ∈ U"
+    proof -
+      from 1(2) have "U ∈ Pow carrier" "∀x ∈ U. U ∈ neigh x"
+        by (auto simp: alt.opens_iff)
+      then have "U ∈ neigh p" using `p ∈ U` by fast
+      then obtain x where 2: "x ∈ U" "x ∈ A - {p}" using 0 by blast
+      then have "x ∈ A" by fast
+      then show "False" using 2(1) 1(1) by blast
+    qed
+  then show "p ∈ A" using `p ∈ carrier` 1(1) by blast
+qed
+
+end
+
+context contains_all_its_limit_points begin
+
+(* Classical! *)
+interpretation closed carrier opens A
+proof
+  have "carrier - (carrier - A) = carrier ∩ A"
+    by (fact Diff_Diff_Int)
+  then have 4: "carrier - (carrier - A) = A"
+    using subset by blast
+  have "∀x ∈ carrier - A. carrier - A ∈ neigh x"
+  proof
+    fix x
+    assume 3: "x ∈ carrier - A"
+    then have 0: "x ∈ carrier" "x ∉ A" by auto
+    from this(1) have "limit_point A x ⟹ x ∈ A"
+      by auto
+    then have "limit_point A x ⟹ False"
+      using 0(2) by blast
+    then have "∃N. N ∈ neigh x ∧ ¬ (∃y ∈ N. y ∈ A - {x})"
+      by auto
+    then obtain N where 2: "N ∈ neigh x" "¬ (∃y ∈ N. y ∈ A - {x})" by auto
+    then have 1: "∀y ∈ N. y ∉ A - {x}" by auto
+    have "∀y ∈ N. y ∈ carrier" using 2(1) 0(1)
+      using alt.neigh_codomain by auto
+    moreover
+    {
+      have "A - {x} = A" using 3 by auto
+      then have "∀y ∈ N. y ∉ A" using 1 by auto
+    }
+    ultimately have "∀y ∈ N. y ∈ carrier - A" by auto
+    then have "N ⊆ carrier - A" by auto
+    then show "carrier - A ∈ neigh x" using alt.enlarge 0(1) 2(1) by auto
+  qed
+  then have "carrier - A ∈ opens" using alt.opens_iff by auto
+  then show "A ∈ closed_sets" using 4 unfolding closed_sets_def by auto
+qed
+
 end
 
 end
