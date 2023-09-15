@@ -641,7 +641,7 @@ locale closed = topological_space +
   fixes A
   assumes is_closed [intro]: "A ∈ closed_sets"
 
-(* Weekly closed *)
+(* Weakly closed *)
 locale contains_all_its_limit_points = topological_space +
   fixes A
   assumes subset [intro]: "A ⊆ carrier"
