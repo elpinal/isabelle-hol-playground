@@ -628,12 +628,33 @@ qed
 end
 
 context topological_space begin
+
 definition limit_point :: "'a set => 'a => bool" where
 "limit_point A p ⟷ (∀N. N ∈ neigh p --> (∃x ∈ N. x ∈ A - {p}))"
+(* This definition does not require p to be in the carrier. *)
 
 lemma limit_point_iff [intro, simp]:
   "limit_point A p ⟷ (∀N. N ∈ neigh p --> (∃x ∈ N. x ∈ A - {p}))"
   by (fact limit_point_def)
+
+lemma limit_point_monotone:
+  assumes "p ∈ carrier"
+  and "A ⊆ B"
+  and "limit_point A p"
+  shows "limit_point B p"
+proof simp
+  {
+    fix N
+    assume "N ∈ neigh p"
+    then obtain x where 0: "x ∈ N" "x ∈ A - {p}" using assms(3) by auto
+    then have "x ∈ B" using assms(2) by auto
+    moreover have "x ≠ p" using 0 by auto
+    ultimately have "∃x ∈ N. x ∈ B ∧ x ≠ p"
+      using 0(1) by auto
+  }
+  then show "∀N. N ∈ neigh p ⟶ (∃x∈N. x ∈ B ∧ x ≠ p)" by auto
+qed
+
 end
 
 (* Strongly closed *)
@@ -708,6 +729,86 @@ proof
   qed
   then have "carrier - A ∈ opens" using alt.opens_iff by auto
   then show "A ∈ closed_sets" using 4 unfolding closed_sets_def by auto
+qed
+
+end
+
+locale subset_of_topological_space = topological_space +
+  fixes A
+  assumes subset [intro]: "A ⊆ carrier"
+begin
+
+definition closure :: "'a set" where
+"closure = A ∪ {p ∈ carrier. limit_point A p}"
+
+lemma closure_iff [simp]: "p ∈ closure ⟷ p ∈ A ∨ (p ∈ carrier ∧ limit_point A p)"
+  by (simp add: closure_def)
+
+lemma closure_subset [intro]: "closure ⊆ carrier"
+  using closure_iff subset by blast
+
+(* Classical! *)
+lemma closure_is_closed [intro]: "closure ∈ closed_sets"
+proof -
+  have "∀p ∈ carrier - closure. carrier - closure ∈ neigh p"
+  proof
+    fix y
+    assume "y ∈ carrier - closure"
+    then have 1: "y ∈ carrier" "y ∉ closure" by auto
+    then have 2: "y ∉ A" "¬ (y ∈ carrier ∧ limit_point A y)"
+      using closure_iff by auto
+    then have "y ∉ carrier ∨ ¬ (limit_point A y)"
+      by blast
+    then have "¬ (limit_point A y)" using 1(1) by blast
+    then obtain N where 3: "N ∈ neigh y" "∀x ∈ N. x ∉ A - {y}"
+      using limit_point_iff by auto
+    then obtain U where 4: "U ∈ opens" "y ∈ U" "U ⊆ N"
+      unfolding neigh_def using 1(1) by auto
+    from 3 have "N ∩ A = {}" using 2(1) by auto
+    then have 0: "U ∩ A = {}"
+      using 4(3) by auto
+    moreover
+    {
+      have "∀x ∈ U. U ∈ neigh x" using 4(1) using alt.opens_iff by auto
+      then have "∀p ∈ U. limit_point A p --> (∃x ∈ U. x ∈ A - {p})"
+        using limit_point_iff by blast
+      then have "∀p ∈ U. limit_point A p --> (U ∩ A ≠ {})" by auto
+      then have "U ∩ {p ∈ carrier. limit_point A p} = {}"
+        using 0 by blast
+    }
+    ultimately have "U ∩ closure = {}" using closure_iff
+      by blast
+    then have "U ⊆ carrier - closure"
+      using `U ∈ opens` by blast
+    then show "carrier - closure ∈ neigh y"
+      using 4(1) 4(2) alt.opens_iff point_in_open_is_in_carrier
+      by auto
+  qed
+  moreover have "carrier - closure ∈ Pow carrier" by (auto simp: closure_subset)
+  ultimately have "carrier - closure ∈ opens" by (auto simp: alt.opens_iff)
+  then show "closure ∈ closed_sets"
+    using closure_subset closed_sets_def by auto
+qed
+
+lemma "closure = ⋂ {C ∈ closed_sets. A ⊆ C}"
+proof -
+  {
+    fix B
+    assume 0: "B ∈ closed_sets" "A ⊆ B"
+    then have "{p ∈ carrier. limit_point A p} ⊆ {p ∈ carrier. limit_point B p}"
+      using limit_point_monotone by auto
+    moreover
+    {
+      interpret cl: closed carrier opens B by (unfold_locales, fact 0(1))
+      have "{p ∈ carrier. limit_point B p} ⊆ B" by (auto simp: cl.limit_point_in_A)
+    }
+    ultimately have "{p ∈ carrier. limit_point A p} ⊆ B" by auto
+    then have "closure ⊆ B" using `A ⊆ B` using closure_iff by auto
+  }
+  then have "⋀B. B ∈ closed_sets ==> A ⊆ B ==> closure ⊆ B" .
+  then have "closure ⊆ ⋂ {C ∈ closed_sets. A ⊆ C}"
+    using Inter_greatest by auto
+  then show ?thesis by auto
 qed
 
 end
