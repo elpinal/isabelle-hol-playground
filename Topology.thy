@@ -790,9 +790,12 @@ proof -
     using closure_subset closed_sets_def by auto
 qed
 
-lemma "closure = ⋂ {C ∈ closed_sets. A ⊆ C}"
+(* Classical! It depends on closure_is_closed. *)
+lemma closure_eq_int_closed_containing:
+  "closure = ⋂ {C ∈ closed_sets. A ⊆ C}"
 proof -
-  {
+  have "⋀B. B ∈ closed_sets ==> A ⊆ B ==> closure ⊆ B"
+  proof -
     fix B
     assume 0: "B ∈ closed_sets" "A ⊆ B"
     then have "{p ∈ carrier. limit_point A p} ⊆ {p ∈ carrier. limit_point B p}"
@@ -803,14 +806,254 @@ proof -
       have "{p ∈ carrier. limit_point B p} ⊆ B" by (auto simp: cl.limit_point_in_A)
     }
     ultimately have "{p ∈ carrier. limit_point A p} ⊆ B" by auto
-    then have "closure ⊆ B" using `A ⊆ B` using closure_iff by auto
-  }
-  then have "⋀B. B ∈ closed_sets ==> A ⊆ B ==> closure ⊆ B" .
+    then show "closure ⊆ B" using `A ⊆ B` using closure_iff by auto
+  qed
   then have "closure ⊆ ⋂ {C ∈ closed_sets. A ⊆ C}"
     using Inter_greatest by auto
   then show ?thesis by auto
 qed
 
+corollary "closure_eq_closed_sets":
+  assumes "closure = A"
+  shows "A ∈ closed_sets"
+  using closure_is_closed assms by auto
+
+definition dense :: bool where
+"dense ⟷ (closure = carrier)"
+
+lemma
+  assumes "dense"
+  and "U ∈ opens"
+  and "A ∩ U = {}"
+  shows "U = {}"
+proof -
+  let ?C = "carrier - U"
+  have "A ⊆ ?C" using assms(3) subset by auto
+  moreover have "?C ∈ closed_sets"
+    using assms(2) closed_sets_def by auto
+  ultimately have "carrier ⊆ ?C"
+    using closure_eq_int_closed_containing assms(1) dense_def by blast
+  moreover have "?C ⊆ carrier" using closed_subsets by auto
+  ultimately have "?C = carrier" by blast
+  thus "U = {}"
+    using assms(2) by blast
+qed
+
+definition interior :: "'a set" where
+"interior = ⋃ {U ∈ opens. U ⊆ A}"
+
+lemma "interior = {x ∈ carrier. A ∈ neigh x}"
+proof (intro subset_antisym, intro subsetI)
+  fix x
+  assume 0: "x ∈ interior"
+  then have "x ∈ carrier" using interior_def by auto
+  moreover {
+    from 0 obtain U where "U ∈ opens" "U ⊆ A" "x ∈ U" using interior_def by auto
+    then have "A ∈ neigh x" using alt.enlarge neigh_def subset by auto
+  }
+  ultimately show "x ∈ {x ∈ carrier. A ∈ neigh x}" by auto
+next
+  {
+    fix x
+    assume "x ∈ {x ∈ carrier. A ∈ neigh x}"
+    then obtain U where "x ∈ U" "U ⊆ A" "U ∈ opens"
+      using neigh_def by fastforce
+    then have "x ∈ interior" using interior_def by auto
+  }
+  thus "{x ∈ carrier. A ∈ neigh x} ⊆ interior" by auto
+qed
+
+lemma
+  assumes "A ∈ opens"
+  shows "interior = A"
+  using assms interior_def by auto
+
+definition frontier :: "'a set" where
+"frontier = closure - interior"
+
 end
+
+locale subset_of_topological_space_and_comp =
+  subset_of_topological_space carrier opens A +
+  comp: subset_of_topological_space carrier opens "carrier - A"
+  for carrier opens A
+begin
+
+(* Perhaps classical *)
+lemma comp_interior_closure_comp: "carrier - interior = comp.closure"
+proof (intro subset_antisym, intro subsetI)
+  fix x
+  assume "x ∈ carrier - interior"
+  then have 0: "x ∈ carrier" "x ∉ interior" by auto
+  then have "⋀U. U ∈ opens ==> U ⊆ A ==> x ∉ U"
+    using interior_def by blast
+  then have 1: "⋀U. U ∈ opens ==> U ⊆ A ==> x ∈ carrier - U"
+    using 0(1) by blast
+  have "x ∈ C" if 2: "C ∈ closed_sets" "carrier - A ⊆ C" for C
+  proof -
+    from 2(1) obtain U where 3: "U ∈ opens" "C = carrier - U"
+      using closed_sets_def by auto
+    then have "U ⊆ A" using 2(2) by auto
+    thus "x ∈ C" using 1 3 by auto
+  qed
+  thus "x ∈ comp.closure"
+    using comp.closure_eq_int_closed_containing by auto
+next
+  {
+    fix x
+    assume 0: "x ∈ comp.closure"
+    hence "x ∈ carrier" by auto
+    moreover {
+      fix U
+      assume 1: "U ∈ opens" "U ⊆ A"
+      then have 3: "carrier - U ∈ closed_sets" (is "?C ∈ closed_sets")
+        using closed_sets_def by auto
+      from 1 have 4: "carrier - A ⊆ ?C" by auto
+      hence "x ∈ ?C"
+        using 0 comp.closure_eq_int_closed_containing 3 by auto
+      then have "x ∉ U" using 1(2) by fast
+    }
+    ultimately have "x ∈ carrier - interior" using interior_def by auto
+  }
+  thus "comp.closure ⊆ carrier - interior" by auto
+qed
+end
+
+locale frontier_in_terms_of_set_complement =
+  subset_of_topological_space carrier opens A +
+  comp: subset_of_topological_space carrier opens "carrier - A"
+  for carrier opens A
+begin
+
+definition frontier_by_closures :: "'a set" where
+"frontier_by_closures = closure ∩ comp.closure"
+
+definition frontier_by_interiors :: "'a set" where
+"frontier_by_interiors = carrier - interior - comp.interior"
+
+interpretation sc1: subset_of_topological_space_and_comp carrier opens A
+  by (simp add:
+    comp.subset_of_topological_space_axioms
+    subset_of_topological_space_and_comp_def
+    subset_of_topological_space_axioms
+  )
+
+interpretation sc2: subset_of_topological_space_and_comp carrier opens "carrier - A"
+  by (simp add:
+    subset_of_topological_space_and_comp_def
+    subset_of_topological_space_axioms.intro
+    subset_of_topological_space_def
+    topological_space_axioms
+  )
+
+lemma "frontier = frontier_by_closures"
+proof -
+  have "frontier = closure - interior" using frontier_def by simp
+  also have "... = closure ∩ (- interior)" by blast
+  also have "... = closure ∩ (carrier - interior)"
+    using closure_subset by force
+  also have "... = closure ∩ comp.closure"
+    using sc1.comp_interior_closure_comp by simp
+  finally have "frontier = closure ∩ comp.closure" by auto
+  thus "frontier = frontier_by_closures" by (simp add: frontier_by_closures_def)
+qed
+
+lemma "frontier = frontier_by_interiors"
+proof (simp add: frontier_def frontier_by_interiors_def)
+  have "closure = carrier - comp.interior"
+    using sc2.comp_interior_closure_comp
+    by (simp add: Diff_Diff_Int Int_absorb1 subset)
+  thus "closure - interior = carrier - interior - comp.interior" by blast
+qed
+
+end
+
+locale metric_space =
+  fixes carrier :: "'a set"
+  and distance :: "'a * 'a => real"
+  assumes distance_dom [intro]: "distance ∈ carrier × carrier →⇩E UNIV"
+  and zero_if [simp]: "distance (x, x) = 0"
+  and zero_only_if [intro]: "[| distance (x, y) = 0 |] ==> x = y"
+  and distance_non_negative [intro]: "distance (x, y) >= 0"
+  and sym [intro]: "distance (x, y) = distance (y, x)"
+  and triangle_inequality [intro]: "distance (x, z) <= distance (x, y) + distance (y, z)"
+begin
+
+definition ball :: "'a => real => 'a set" where
+"ball x r = {y ∈ carrier. distance (x, y) <= r}"
+
+lemma ball_is_subset_of_carrier: "ball x r ⊆ carrier"
+  unfolding ball_def by auto
+
+lemma ball_leq [intro]:
+  assumes "r <= s"
+  shows "ball x r ⊆ ball x s"
+  using ball_def assms
+  by fastforce
+
+definition opens :: "'a set set" where
+"opens = {U ∈ Pow carrier. ∀x ∈ U. ∃r. r > 0 ∧ ball x r ⊆ U}"
+
+lemma carrier_is_open: "carrier ∈ opens"
+  unfolding opens_def
+  using ball_is_subset_of_carrier
+  by (simp add: gt_ex)
+
+lemma opens_are_closed_under_intersection:
+  assumes "U ∈ opens" "V ∈ opens"
+  shows "U ∩ V ∈ opens"
+proof -
+  have "⋀ x. x ∈ U ∩ V ⟹ ∃r. r > 0 ∧ ball x r ⊆ U ∩ V"
+  proof -
+    fix x
+    assume "x ∈ U ∩ V"
+    then have 0: "x ∈ U" "x ∈ V" by auto
+    obtain r where
+      1: "r > 0" "ball x r ⊆ U"
+      using 0(1) assms(1) by (auto simp: opens_def)
+    obtain s where
+      2: "s > 0" "ball x s ⊆ V"
+      using 0(2) assms(2) by (auto simp: opens_def)
+    {
+      have "min r s ≤ r" by arith
+      then have "ball x (min r s) ⊆ U"
+        using ball_leq 1(2) by blast
+    } moreover {
+      have "min r s ≤ s" by arith
+      then have "ball x (min r s) ⊆ V"
+        using ball_leq 2(2) by blast
+    }
+    ultimately have "ball x (min r s) ⊆ U ∩ V" by auto
+    moreover have "min r s > 0" using 1(1) 2(1) by arith
+    ultimately show "∃r. r > 0 ∧ ball x r ⊆ U ∩ V"
+      by (auto intro: exI[where ?x = "min r s"])
+  qed
+  then show ?thesis using assms by (auto simp: opens_def)
+qed
+
+lemma opens_are_closed_under_union:
+  assumes "A ⊆ opens"
+  shows "⋃ A ∈ opens"
+proof -
+  {
+    fix x
+    assume "x ∈ ⋃ A"
+    then obtain U where 0: "U ∈ opens" "U ∈ A" "x ∈ U"
+      using assms by auto
+    then obtain r where "r > 0" "ball x r ⊆ U" by (auto simp: opens_def)
+    moreover have "U ⊆ ⋃ A" using 0(2) by auto
+    ultimately have "ball x r ⊆ ⋃ A" by auto
+    then have "∃ r. r > 0 ∧ ball x r ⊆ ⋃ A"
+      using `r > 0` by auto
+  }
+  then show ?thesis using opens_def assms by auto
+qed
+
+sublocale topological_space carrier opens
+  using carrier_is_open opens_are_closed_under_intersection opens_are_closed_under_union
+  by (unfold_locales, auto simp: opens_def)
+
+end
+
 
 end
