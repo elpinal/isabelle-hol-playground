@@ -126,31 +126,9 @@ proof (unfold_locales, blast)
   let ?A1 = "{V ∈ OX. V ∩ S ⊆ ⋃ A}"
   let ?U1 = "⋃ ?A1"
   have "?U1 ∈ OX" by auto
-  have "?U1 ∩ S = (⋃C ∈ ?A1. C ∩ S)" by (rule Int_Union2)
-  have "(⋃C ∈ ?A1. C ∩ S) ⊆ ⋃ A" by auto
-  have 1: "C ⊆ ⋃ A" if "C ∈ A" for C
-    proof
-      fix x :: "'a"
-      assume "x ∈ C"
-      then show "x ∈ ⋃ A" using `C ∈ A` by auto
-    qed
-  have 2: "∃V ∈ OX. C = V ∩ S" if "C ∈ A" for C
-    proof -
-      from 0 `C ∈ A` obtain U where "C = U ∩ S ∧ U ∈ OX" by auto
-      then show ?thesis by auto
-    qed
-  have 4: "∃V ∈ ?A1. C = V ∩ S" if "C ∈ A" for C
-    proof -
-      from 2 `C ∈ A` obtain U where 3: "U ∈ OX ∧ C = U ∩ S" by auto
-      from this 1 `C ∈ A` have "U ∈ ?A1" by auto
-      from this 3 show ?thesis by auto
-    qed
-  have 5: "V ⊆ ?U1" if "V ∈ ?A1" for V
-    proof
-      fix x :: "'a"
-      assume "x ∈ V"
-      then show "x ∈ ?U1" using `V ∈ ?A1` by auto
-    qed
+  have "⋀ C. C ∈ A ⟹ ∃V ∈ OX. C = V ∩ S" using 0 by auto
+  then have 4: "⋀ C. C ∈ A ⟹ ∃V ∈ ?A1. C = V ∩ S" by auto
+  have 5: "⋀ V. V ∈ ?A1 ⟹ V ⊆ ?U1" by auto
   then have "T ⊆ ?U1 ∩ S" if "T ∈ A" for T
     proof -
       from 4 obtain V where 6: "V ∈ ?A1 ∧ T = V ∩ S" using `T ∈ A` by auto
