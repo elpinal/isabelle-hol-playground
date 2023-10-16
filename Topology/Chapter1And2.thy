@@ -1,4 +1,4 @@
-theory Topology
+theory Chapter1And2
   imports Main HOL.Real "HOL-Library.FuncSet"
 begin
 
